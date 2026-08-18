@@ -18,10 +18,13 @@
      Layer picker <-> detail panel <-> 3D scene sync
      ============================================================ */
   let selectedLayer = 0;
+  let cardExpanded = false;
   const layerListeners = [];
+  const expandListeners = [];
+  let lastFocused = null;
 
   function selectLayer(i) {
-    if (i === selectedLayer) return;
+    const changed = i !== selectedLayer;
     selectedLayer = i;
     document.querySelectorAll('.layer-card').forEach((el, idx) => {
       const active = idx === i;
@@ -31,11 +34,43 @@
     document.querySelectorAll('.layer-detail').forEach((el, idx) => {
       el.hidden = idx !== i;
     });
-    layerListeners.forEach(fn => fn(i));
+    if (changed) layerListeners.forEach(fn => fn(i));
+    expandCard();
+  }
+
+  function expandCard() {
+    if (cardExpanded) return;
+    cardExpanded = true;
+    lastFocused = document.activeElement;
+    const sceneEl = document.querySelector('.scene');
+    if (sceneEl) {
+      sceneEl.classList.add('is-expanded');
+      const r = sceneEl.getBoundingClientRect();
+      const fullyVisible = r.top >= 0 && r.bottom <= window.innerHeight;
+      if (!fullyVisible) sceneEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    expandListeners.forEach(fn => fn(true));
+    const closeBtn = document.getElementById('scene-close');
+    if (closeBtn) closeBtn.focus({ preventScroll: true });
+  }
+
+  function closeExpanded() {
+    if (!cardExpanded) return;
+    cardExpanded = false;
+    const sceneEl = document.querySelector('.scene');
+    if (sceneEl) sceneEl.classList.remove('is-expanded');
+    expandListeners.forEach(fn => fn(false));
+    if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus({ preventScroll: true });
   }
 
   document.querySelectorAll('.layer-card').forEach(btn => {
     btn.addEventListener('click', () => selectLayer(Number(btn.dataset.layer)));
+  });
+
+  const sceneCloseBtn = document.getElementById('scene-close');
+  if (sceneCloseBtn) sceneCloseBtn.addEventListener('click', closeExpanded);
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && cardExpanded) closeExpanded();
   });
 
   /* ============================================================
@@ -189,7 +224,6 @@
       x.fillText(l.motto, 56, 428);
       const t = new T.CanvasTexture(c);
       t.anisotropy = 4;
-      t.center.set(.5, .5); t.rotation = Math.PI;
       return t;
     };
 
@@ -204,7 +238,7 @@
       body.userData.i = i;
       g.add(body);
       const mo = new T.Group();
-      mo.position.set(-1.2, .175, 0);
+      mo.position.set(1.2, .175, 0);
       motif(T, mo, l);
       g.add(mo);
 
@@ -236,14 +270,15 @@
 
     let ry = -0.55, rx = 0.52, spin = 0.0016, dragging = false, px = 0, py = 0, moved = 0;
     const box3 = new T.Box3(), bSize = new T.Vector3(), bCtr = new T.Vector3();
-    let fitZ = 16, fitY = 0, frame = 0, sel = selectedLayer;
+    let fitZ = 16, fitY = 0, frame = 0, sel = selectedLayer, expanded = cardExpanded;
     const ray = new T.Raycaster(), pt = new T.Vector2();
 
     layerListeners.push(i => { sel = i; });
+    expandListeners.push(v => { expanded = v; });
 
     canvas.addEventListener('pointerdown', e => { dragging = true; moved = 0; px = e.clientX; py = e.clientY; spin = 0; canvas.classList.add('is-dragging'); });
     window.addEventListener('pointermove', e => {
-      if (!dragging) return;
+      if (!dragging || expanded) return;
       const dx = e.clientX - px, dy = e.clientY - py;
       moved += Math.abs(dx) + Math.abs(dy);
       ry += dx * 0.008;
@@ -258,7 +293,11 @@
       pt.y = -((e.clientY - r.top) / r.height) * 2 + 1;
       ray.setFromCamera(pt, cam);
       const hit = ray.intersectObjects(slabs, true)[0];
-      if (hit) { let o = hit.object; while (o && o.userData.i === undefined) o = o.parent; if (o) selectLayer(o.userData.i); }
+      if (!hit) return;
+      let o = hit.object; while (o && o.userData.i === undefined) o = o.parent;
+      if (!o) return;
+      if (expanded && o.userData.i === sel) { closeExpanded(); return; }
+      selectLayer(o.userData.i);
     });
 
     const loop = () => {
@@ -269,34 +308,63 @@
         rend.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
         frame = 0;
       }
-      ry += spin;
-      grp.rotation.y += (ry - grp.rotation.y) * .1;
-      grp.rotation.x += (rx - grp.rotation.x) * .1;
+
+      // Orbit: ambient spin + drag in normal view; snaps to a flat, head-on
+      // angle while a card is expanded so the extracted slab reads like a
+      // straight 2D card, not a tilted tabletop.
+      if (!expanded) ry += spin;
+      const ryTarget = expanded ? 0 : ry;
+      const rxTarget = expanded ? 0 : rx;
+      grp.rotation.y += (ryTarget - grp.rotation.y) * .1;
+      grp.rotation.x += (rxTarget - grp.rotation.x) * .1;
+
       const pulse = .42 + Math.sin(performance.now() / 620) * .1;
       slabs.forEach((g, i) => {
-        const on = i === sel, u = g.userData;
-        g.position.x += ((on ? .82 : 0) - g.position.x) * .1;
-        g.position.y += (((2.6 - i * 1.3) + (on ? .22 : 0)) - g.position.y) * .1;
-        g.rotation.y += ((on ? i * 0.12 - .1 : i * 0.12) - g.rotation.y) * .1;
-        u.mat.emissiveIntensity += ((on ? pulse : .04) - u.mat.emissiveIntensity) * .1;
-        u.top.color.setScalar(u.top.color.r + ((on ? 1 : .74) - u.top.color.r) * .1);
+        const on = expanded && i === sel, u = g.userData;
+        const restY = 2.6 - i * 1.3;
+        g.position.x += ((on ? 0 : 0) - g.position.x) * .1;
+        g.position.z += ((on ? 2.6 : 0) - g.position.z) * .12;
+        g.position.y += ((restY + (on ? .1 : 0)) - g.position.y) * .1;
+        g.rotation.y += ((on ? 0 : i * 0.12) - g.rotation.y) * .1;
+        // Stand the extracted slab up: rotating its top (labeled) face 90°
+        // about X turns it from a flat tabletop into a vertical card facing
+        // the camera square-on, like it was pulled out of the stack.
+        g.rotation.x += ((on ? Math.PI / 2 : 0) - g.rotation.x) * .1;
+        const s = g.scale.x + ((on ? 1.4 : 1) - g.scale.x) * .12;
+        g.scale.setScalar(s);
+        u.mat.emissiveIntensity += ((on ? pulse : .03) - u.mat.emissiveIntensity) * .1;
+        u.top.color.setScalar(u.top.color.r + ((on ? 1 : .55) - u.top.color.r) * .1);
         u.mat.metalness += ((on ? .3 : .55) - u.mat.metalness) * .1;
-        u.rail.material.opacity += ((on ? 1 : .45) - u.rail.material.opacity) * .1;
-        u.side.material.opacity += ((on ? .8 : .28) - u.side.material.opacity) * .1;
-        u.edge.material.opacity += ((on ? .55 : .16) - u.edge.material.opacity) * .1;
+        u.rail.material.opacity += ((on ? 1 : (expanded ? .12 : .45)) - u.rail.material.opacity) * .1;
+        u.side.material.opacity += ((on ? .8 : (expanded ? .08 : .28)) - u.side.material.opacity) * .1;
+        u.edge.material.opacity += ((on ? .55 : (expanded ? .06 : .16)) - u.edge.material.opacity) * .1;
         if (u.mo && u.mo.userData.tick) u.mo.userData.tick(performance.now() / 1000 + i * 1.7);
       });
       glow.intensity = .42 + Math.sin(performance.now() / 900) * .08;
 
       if (frame++ % 8 === 0) {
         grp.updateMatrixWorld(true);
-        box3.setFromObject(grp);
-        box3.getSize(bSize); box3.getCenter(bCtr);
         const tan = Math.tan(34 * Math.PI / 360);
-        const dV = (bSize.y / 2) / tan;
-        const dH = (bSize.x / 2) / (tan * cam.aspect);
-        fitZ = Math.max(dV, dH) * 1.04 + bSize.z / 2;
-        fitY = bCtr.y;
+        if (expanded && slabs[sel]) {
+          // Fit the camera to the expanded slab's ACTUAL world bounding box
+          // (post scale/position/rotation), not a guessed distance — guarantees
+          // it's fully in frame with consistent breathing room no matter which
+          // slab, viewing angle, or scale is in play.
+          box3.setFromObject(slabs[sel]);
+          box3.getSize(bSize); box3.getCenter(bCtr);
+          const dV = (bSize.y / 2) / tan;
+          const dH = (bSize.x / 2) / (tan * cam.aspect);
+          const dist = Math.max(dV, dH) * 1.45 + bSize.z / 2;
+          fitZ = bCtr.z + dist;
+          fitY = bCtr.y;
+        } else {
+          box3.setFromObject(grp);
+          box3.getSize(bSize); box3.getCenter(bCtr);
+          const dV = (bSize.y / 2) / tan;
+          const dH = (bSize.x / 2) / (tan * cam.aspect);
+          fitZ = Math.max(dV, dH) * 1.04 + bSize.z / 2;
+          fitY = bCtr.y;
+        }
       }
       cam.position.y += (fitY - cam.position.y) * .08;
       cam.position.z += (fitZ - cam.position.z) * .08;
