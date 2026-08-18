@@ -47,7 +47,7 @@
   --hero-pad: 76px;
   --h1-size: 68px;
   --canvas-h: 540px;
-  --layer-cols: repeat(5, 1fr);
+  --layer-cols: repeat(3, 1fr);
   --detail-cols: 300px 1fr;
   --exp-cols: 250px 1fr;
   --proj-cols: 390px 1fr;

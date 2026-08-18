@@ -6,11 +6,12 @@
      The visible 2D content is static HTML; this just feeds the canvas textures.
      ============================================================ */
   const LAYERS = [
-    { kind: 'NOW',        mark: 'IBM',          when: 'Dec 2024 – Present', motto: 'Fraud & Abuse platforms',          color: 0xd98a4f, motif: 'grid' },
-    { kind: 'PROJECT',    mark: 'WI-TP',        when: '2026 – Present',     motto: 'GitHub → Guard → Transform → DB',  color: 0xc9c1b6, motif: 'pipe' },
-    { kind: 'MSC',        mark: 'EUDE · MSc',   when: 'Jan 2025 – Nov 2025', motto: '1,125 h · 45 ECTS · Honors',      color: 0x9c9186, motif: 'bars' },
-    { kind: 'PREVIOUS',   mark: 'West Monroe',  when: 'Mar 2024 – Nov 2024', motto: '20+ apps migrated in six months', color: 0xa89d92, motif: 'migrate' },
-    { kind: 'FOUNDATION', mark: 'CENFOTEC',     when: 'Jan 2020 – Jul 2024', motto: 'BSc · Honors · 2× best project',  color: 0x6f665e, motif: 'nodes' }
+    { kind: 'NOW',           mark: 'IBM',          when: 'Dec 2024 – Present', motto: 'Fraud & Abuse platforms',          color: 0xd98a4f, motif: 'grid' },
+    { kind: 'PROJECT',       mark: 'WI-TP',        when: '2026 – Present',     motto: 'GitHub → Guard → Transform → DB',  color: 0xc9c1b6, motif: 'pipe' },
+    { kind: 'MSC',           mark: 'EUDE · MSc',   when: 'Jan 2025 – Nov 2025', motto: '1,125 h · 45 ECTS · Honors',      color: 0x9c9186, motif: 'bars' },
+    { kind: 'PREVIOUS',      mark: 'West Monroe',  when: 'Mar 2024 – Nov 2024', motto: '20+ apps migrated in six months', color: 0xa89d92, motif: 'migrate' },
+    { kind: 'APPRENTICESHIP',mark: 'Konrad Group', when: 'May 2022 – Jul 2022', motto: '3 apps shipped in 3 months',      color: 0x8b8178, motif: 'bars' },
+    { kind: 'FOUNDATION',    mark: 'CENFOTEC',     when: 'Jan 2020 – Jul 2024', motto: 'BSc · Honors · 2× best project',  color: 0x6f665e, motif: 'nodes' }
   ];
 
   /* ============================================================
@@ -223,7 +224,7 @@
       g.userData = { i, mat, top, rail, side, edge, mo };
       grp.add(g); slabs.push(g);
     });
-    grp.add(new T.Mesh(new T.CylinderGeometry(.045, .045, 6.1, 8), new T.MeshBasicMaterial({ color: 0xd98a4f, transparent: true, opacity: .22 })));
+    grp.add(new T.Mesh(new T.CylinderGeometry(.045, .045, .34 + (LAYERS.length - 1) * 1.3 + .56, 8), new T.MeshBasicMaterial({ color: 0xd98a4f, transparent: true, opacity: .22 })));
 
     const floor = new T.GridHelper(26, 26, 0x3a302a, 0x2a231f);
     floor.position.y = -4.5;
